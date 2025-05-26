@@ -23,6 +23,46 @@ chmod +x kvm-manager.sh
 
 OS_VARIANT请运行命令:`osinfo-query os`进行查询，可能需要先安装`apt-get install libosinfo-bin`
 
+> 注意：使用无人值守时，请检查代码中SEED的配置，请根据实际情况修改脚本中`cloud-config`的 `ethernets`（外部网卡名称）。
+
+如忘记配置，可以手动修改netplan中的配置进行调整：
+
+```bash
+sudo vim /etc/netplan/50-cloud-init.yaml
+```
+
+```bash
+sudo netplan apply
+```
+
+## windows  使用方法
+windows安装完成后可能存在无网络的问题，需要挂载virtio-win的iso，
+查询虚拟机磁盘：
+```bash
+virsh domblklist <vm_name>
+```
+可能如下：
+```bash
+root@faab:/etc/netplan# virsh domblklist win
+ Target   Source
+--------------------------------------------------------------------------------------
+ sda      /var/lib/libvirt/images/win.qcow2
+ sdb      /home/iso/zh-cn_windows_server_2022_updated_june_2024_x64_dvd_8c5a802d.iso
+```
+将sdb替换
+```bash
+virsh change-media win sdb --eject  # 先弹出现有的 ISO
+virsh change-media win sdb /home/iso/virtio-win-0.1.271.iso --update  # 挂载新的 ISO
+```
+虚拟机无需关机，在文件管理可查看挂载的 ISO
+在iso下运行`virtio-win-gt-x64.exe`安装即可
+
+然后宿主机需要执行：
+```bash
+sysctl net.ipv4.ip_forward=1
+sudo iptables -t nat -A POSTROUTING -s 192.168.6.0/24 ! -d 192.168.6.0/24 -j MASQUERADE
+```
+>192.168.6.0这个IP需要与kvm-manager.sh中配置的net1网络的IP一致
 
 ## 打包
 
@@ -39,3 +79,50 @@ pyinstaller --onefile --add-data "kvm-manager.sh:." web_manager.py
 chmod +x web_manager
 ./web_manager
 ```
+
+# forword_manager.sh
+
+`forword_manager.sh` 是一个用于批量管理 KVM 虚拟机端口转发的脚本，主要功能如下：
+
+- 自动检测并安装 `iptables-persistent` 依赖
+- 支持单端口和端口范围的 TCP/UDP 转发
+- 一键添加或移除所有端口转发规则
+- 自动开启 IP 转发和 NAT（MASQUERADE）
+- 规则配置文件支持注释和灵活格式
+
+## 使用方法
+
+1. **准备端口映射配置文件**
+
+   复制示例文件并根据实际需求编辑：
+
+   ```bash
+   cp port_mappings.txt.example port_mappings.txt
+   vim port_mappings.txt
+   ```
+
+   配置格式示例：
+
+   ```
+   20080 192.168.5.2 80
+   20443 192.168.5.2 443
+   20022 192.168.5.2 22
+
+   # 端口范围格式：start-end guest_ip guest_port_start
+   # 15000-19000 192.168.5.2 15000
+   ```
+
+2. **运行脚本添加端口转发规则**
+
+   ```bash
+   sudo bash forword_manager.sh add
+   ```
+
+3. **移除所有端口转发规则**
+
+   ```bash
+   sudo bash forword_manager.sh remove
+   ```
+
+
+>  注意：请根据实际需求修改端口映射配置文件以及网卡名称。

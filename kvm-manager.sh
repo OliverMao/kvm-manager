@@ -34,6 +34,16 @@ function create_vm() {
   read -p "请输入ISO名称 [默认ubuntu-20.04.6-live-server-amd64.iso]: " ISO_NAME
   ISO_NAME=${ISO_NAME:-ubuntu-20.04.6-live-server-amd64.iso}
 
+  # 新增：如果ISO为Windows，提示手动设置静态IP
+  if [[ "$ISO_NAME" =~ [Ww]in ]]; then
+    echo "⚠️ 检测到Windows镜像。请在Windows系统内手动设置静态IP:"
+    echo "  IP地址: $VM_IP"
+    echo "  子网掩码: 255.255.255.0"
+    echo "  网关: 192.168.6.1"
+    echo "  DNS: 8.8.8.8 或 114.114.114.114"
+    echo "  (cloud-init不适用于Windows，自动静态IP配置无效)"
+  fi
+
   # 检查ISO路径权限问题
   if [[ "$ISO_NAME" == /root/* ]]; then
     echo "警告：ISO文件在/root目录下，libvirt/qemu默认无法访问。"
@@ -82,6 +92,7 @@ local-hostname: $VM_NAME
 EOF
 
     # 自动生成user-data（用户名ubuntu，密码ubuntu，静态IP）
+    # PS： 外部网卡名称注意修改
     cat > "$SEED_DIR/user-data" <<EOF
 #cloud-config
 autoinstall:
@@ -235,6 +246,12 @@ EOF
     sudo virsh net-start nat1
     sudo virsh net-autostart nat1
     echo "nat1网络已初始化并启动。"
+    echo "如虚拟机无法联网，请检查宿主机iptables/nat转发设置。"
+    echo "排查建议："
+    echo "  1. 宿主机执行: sysctl net.ipv4.ip_forward=1"
+    echo "  2. 执行sudo iptables -t nat -A POSTROUTING -s 192.168.6.0/24 ! -d 192.168.6.0/24 -j MASQUERADE"
+    echo "  3. 检查虚拟机网关和DNS设置"
+    echo "  4. Windows虚拟机需在系统内手动配置静态IP"
   fi
 }
 
@@ -367,6 +384,70 @@ function export_vm_iso() {
   rm -f "$RAW_PATH"
 }
 
+function resize_vm() {
+  read -p "请输入要调整的虚拟机名称: " VM_NAME
+  if ! virsh dominfo "$VM_NAME" &>/dev/null; then
+    echo "未找到虚拟机 $VM_NAME"
+    return 1
+  fi
+
+  # 获取当前配置
+  CUR_CPU=$(virsh dominfo "$VM_NAME" | awk '/CPU\(s\)/ {print $2}')
+  CUR_RAM_KB=$(virsh dominfo "$VM_NAME" | awk '/Max memory/ {print $3}')
+  CUR_RAM_MB=$((CUR_RAM_KB / 1024))
+
+  echo "当前CPU核心数: $CUR_CPU"
+  echo "当前内存(MB): $CUR_RAM_MB"
+
+  read -p "请输入新的CPU核心数 [回车保留当前]: " NEW_CPU
+  read -p "请输入新的内存大小(MB) [回车保留当前]: " NEW_RAM
+
+  NEW_CPU=${NEW_CPU:-$CUR_CPU}
+  NEW_RAM=${NEW_RAM:-$CUR_RAM_MB}
+
+  # 修改CPU
+  if virsh setvcpus "$VM_NAME" "$NEW_CPU" --config; then
+    echo "CPU核心数已设置为 $NEW_CPU"
+  else
+    echo "CPU调整失败"
+  fi
+
+  # 修改内存
+  if virsh setmaxmem "$VM_NAME" "$((NEW_RAM * 1024))" --config && virsh setmem "$VM_NAME" "$((NEW_RAM * 1024))" --config; then
+    echo "内存已设置为 $NEW_RAM MB"
+  else
+    echo "内存调整失败"
+  fi
+
+  echo "如虚拟机正在运行，部分操作可能需关机后再生效。"
+}
+
+function suspend_vm() {
+  read -p "请输入要挂起的虚拟机名称: " VM_NAME
+  if virsh domstate "$VM_NAME" | grep -q running; then
+    if virsh suspend "$VM_NAME"; then
+      echo "虚拟机 $VM_NAME 已挂起。"
+    else
+      echo "挂起失败。"
+    fi
+  else
+    echo "虚拟机 $VM_NAME 当前未运行，无法挂起。"
+  fi
+}
+
+function resume_vm() {
+  read -p "请输入要恢复的虚拟机名称: " VM_NAME
+  if virsh domstate "$VM_NAME" | grep -q paused; then
+    if virsh resume "$VM_NAME"; then
+      echo "虚拟机 $VM_NAME 已恢复。"
+    else
+      echo "恢复失败。"
+    fi
+  else
+    echo "虚拟机 $VM_NAME 当前未处于挂起状态。"
+  fi
+}
+
 while true; do
   echo "请选择操作类别："
   echo "1. 虚拟机管理"
@@ -388,6 +469,9 @@ while true; do
     echo "4. 启动虚拟机"
     echo "5. 虚拟机关机"
     echo "6. 导出虚拟机磁盘为ISO镜像"
+    echo "7. 调整虚拟机内存和CPU"
+    echo "8. 挂起虚拟机"
+    echo "9. 恢复虚拟机"
     echo "x. 返回主菜单"
     read -p "请输入虚拟机操作序号: " VM_ACTION
     if [ "$VM_ACTION" == "x" ] || [ "$VM_ACTION" == "X" ]; then
@@ -424,6 +508,15 @@ while true; do
         ;;
       6)
         export_vm_iso
+        ;;
+      7)
+        resize_vm
+        ;;
+      8)
+        suspend_vm
+        ;;
+      9)
+        resume_vm
         ;;
       *)
         echo "无效选项"

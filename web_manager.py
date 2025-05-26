@@ -57,6 +57,12 @@ def index():
         elif action == 'export':
             result = subprocess.run([SCRIPT_PATH], input=f'1\n6\n{vm_name}\nx\n', text=True, capture_output=True)
             flash(result.stdout[-500:])
+        elif action == 'suspend':
+            result = subprocess.run([SCRIPT_PATH], input=f'1\n8\n{vm_name}\nx\n', text=True, capture_output=True)
+            flash(result.stdout[-500:])
+        elif action == 'resume':
+            result = subprocess.run([SCRIPT_PATH], input=f'1\n9\n{vm_name}\nx\n', text=True, capture_output=True)
+            flash(result.stdout[-500:])
         return redirect(url_for('index'))
     # 获取虚拟机列表
     result = subprocess.run([SCRIPT_PATH], input='1\n2\nx\n', text=True, capture_output=True)
@@ -101,6 +107,8 @@ def index():
           <td>
             <button name="action" value="start" class="btn btn-success btn-sm" {% if vm.state=='running' %}disabled{% endif %} onclick="this.form.vm_name.value='{{ vm.name }}'">启动</button>
             <button name="action" value="shutdown" class="btn btn-warning btn-sm" {% if vm.state!='running' %}disabled{% endif %} onclick="this.form.vm_name.value='{{ vm.name }}'">关机</button>
+            <button name="action" value="suspend" class="btn btn-secondary btn-sm" {% if vm.state!='running' %}disabled{% endif %} onclick="this.form.vm_name.value='{{ vm.name }}'">挂起</button>
+            <button name="action" value="resume" class="btn btn-primary btn-sm" {% if vm.state!='paused' %}disabled{% endif %} onclick="this.form.vm_name.value='{{ vm.name }}'">恢复</button>
             <button name="action" value="delete" class="btn btn-danger btn-sm" onclick="this.form.vm_name.value='{{ vm.name }}'">删除</button>
             <button name="action" value="export" class="btn btn-info btn-sm" onclick="this.form.vm_name.value='{{ vm.name }}'">导出ISO</button>
           </td>
