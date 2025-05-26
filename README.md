@@ -14,6 +14,28 @@
 > 需先初始化 nat1 网络后，方可创建虚拟机。  
 > 支持 Ubuntu Server系统的自动化安装。
 
+```bash
+# 赋予权限
+chmod +x kvm-manager.sh
+```
+
 请以 root 或具备 sudo 权限的用户运行本脚本。
 
 OS_VARIANT请运行命令:`osinfo-query os`进行查询，可能需要先安装`apt-get install libosinfo-bin`
+
+
+## 打包
+
+```bash 
+pip install pyinstaller
+
+```
+
+```bash 
+pyinstaller --onefile --add-data "kvm-manager.sh:." web_manager.py
+```
+
+```bash
+chmod +x web_manager
+./web_manager
+```
