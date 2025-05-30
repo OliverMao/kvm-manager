@@ -126,3 +126,27 @@ chmod +x web_manager
 
 
 >  注意：请根据实际需求修改端口映射配置文件以及网卡名称。
+
+
+# 注意
+
+## 遇到宿主机没有网络的情况
+
+```bash
+可能是/etc/resolv.conf文件的DNS指向为127.0.0.53
+可以运行“resolvectl status”查看当前正在使用的上行DNS服务器的详细信息
+修改方法：
+修改：/etc/systemd/resolved.conf
+DNS设置为： DNS=223.5.5.5 8.8.8.8
+           FallbackDNS=114.114.114.114 1.1.1.1
+
+运行：systemctl restart systemd-resolved
+
+再次查看：resolvectl status
+
+此时应该可以有效访问外网
+
+```
+
+
+   
